@@ -39,8 +39,7 @@ int main() {
   sockaddr_in serverAddress;
   serverAddress.sin_addr.s_addr = INADDR_ANY;
   serverAddress.sin_family = AF_INET;
-  serverAddress.sin_port = LISTENING_PORT;
-
+  serverAddress.sin_port = htons(LISTENING_PORT);
   if(bind(serverFd, reinterpret_cast<sockaddr*>(&serverAddress), sizeof(serverAddress)) == -1) {
     std::cout << "ERROR: Cannot start server and error binding the socket." << std::endl;
     return 1;
@@ -50,6 +49,7 @@ int main() {
     std::cout << "ERROR: Cannot start server and error listen to the socket." << std::endl;
     return 1;
   }
+  std::cout << "INFO: Started listening on *:" << LISTENING_PORT << std::endl;
 
   std::vector<int> clients;
   char* buffer;

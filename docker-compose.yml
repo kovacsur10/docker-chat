@@ -1,0 +1,9 @@
+version: "3.9"
+services:
+  chat-server:
+    build: .
+    image: cpp-server
+    ports:
+      - "9999:12555"  #előbb van mindig a local port és utána a docker
+    volumes:
+      - ./cpp-server:/proj #dinamikusan futtatáskor ide fogja csatolni a tartalmát
