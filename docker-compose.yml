@@ -1,9 +1,36 @@
 version: "3.9"
 services:
+  mysql-server:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: qwe123
+      MYSQL_DATABASE: chatdb
+      MYSQL_USER: adminuser
+      MYSQL_PASSWORD: almafa1
+    restart: always
+    volumes:
+      - dbdata:/var/lib/mysql
+  phpmyadmin-console:
+    image: phpmyadmin/phpmyadmin:5.2
+    links:
+      - mysql-server
+    depends_on:
+      - mysql-server
+    environment:
+      PMA_HOST: mysql-server
+      PMA_PORT: 3306
+      PMA_ARBITRARY: 1
+    restart: always
+    ports:
+      - 8080:80
   chat-server:
     build: .
     image: cpp-server
+    depends_on:
+      - mysql-server
     ports:
       - "9999:12555"  #előbb van mindig a local port és utána a docker
     volumes:
       - ./cpp-server:/proj #dinamikusan futtatáskor ide fogja csatolni a tartalmát
+volumes:
+  dbdata:
