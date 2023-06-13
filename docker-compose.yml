@@ -26,11 +26,24 @@ services:
   chat-server:
     build: .
     image: cpp-server
+    restart: always
     depends_on:
       - mysql-server
     ports:
-      - "9999:12555"  #előbb van mindig a local port és utána a docker
+      - 9999:12555  #előbb van mindig a local port és utána a docker
     volumes:
       - ./cpp-server:/proj #dinamikusan futtatáskor ide fogja csatolni a tartalmát
+  login-server:
+    build: .
+    image: login-server
+    restart: always
+    links:
+      - mysql-server
+    depends_on:
+      - mysql-server
+    ports:
+      - 10000:10000  #előbb van mindig a local port és utána a docker
+    volumes:
+      - ./python-login-server:/proj #dinamikusan futtatáskor ide fogja csatolni a tartalmát
 volumes:
   dbdata:

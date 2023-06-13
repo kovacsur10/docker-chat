@@ -1,6 +1,7 @@
 import socket
 import logging
-
+import datetime
+import mysql.connector # mysql-connector-python 
 
 # 1. Fogad kliens csatlakozasi kerelmeket.
 # 2. Hitelesiti a kerelmeket. Vagy elutasitja vagy elfogadja.
@@ -30,12 +31,27 @@ class Connection:
 
   def _accept(self, token : str):
     self.connection.sendall("ACCEPT\nTOKEN {token}\n".format(token=token).encode())
+    logging.info("New token was inserted: {token}".format(token=token))
 
   # returns: (authenticated or not, token)
-  def _authentication(self, username : str, password : str) -> tuple[bool, str]:
-    return (False, "") # TODO
+  def _authentication(self, databaseRef, username : str, password : str) -> tuple[bool, str]:
+    cursor = databaseRef.cursor()
+    try:
+      cursor.execute("SELECT id FROM users WHERE username LIKE '{username}' AND password LIKE '{password}';".format(username=username, password=password))
+      user = cursor.fetchone()
+      if user is not None:
+        # 2. token generálás és elmentés az adatbázisba
+        newToken = "{username}-{datetime}".format(username=username, datetime=datetime.datetime.now()).replace(' ', '%')
+        cursor.execute("DELETE FROM tokens WHERE user_id=%s;", (user[0],))
+        cursor.execute("INSERT INTO tokens (user_id, token) VALUES (%s, %s);", (user[0], newToken))
+        databaseRef.commit()
+        return (True, newToken)
+    except RuntimeError as ex:
+      databaseRef.rollback()
+      logging.error("Could not insert the token to the database. Error: {}".format(ex))
+    return (False, "")
 
-  def handleMessage(self):
+  def handleMessage(self, databaseRef):
     if self.buffer:
       try:
         [method, username, password] = self.buffer.split(' ')
@@ -43,18 +59,19 @@ class Connection:
           self._sendError("Expected message: LOGIN.")
           raise RuntimeWarning("Erroneous message from user '{address}'. Closing the connection.".format(address=self.address))
         password = password[:-1]
-
-        authenticated, token = self._authentication(username, password)
-        if authenticated:
-          self._accept(token)
-        else:
-          self._sendError("Wrong username and/or password.")
-
       except Exception as err:
         self._sendError("Misformatted message.")
         logging.debug("Arrived message: {msg}".format(msg=self.buffer))
         logging.error("Erroneous message from user '{address}'. Closing the connection. Error: {err}".format(address=self.address, err=err))
         raise RuntimeWarning("Erroneous message from user '{address}'. Closing the connection.".format(address=self.address))
+
+      authenticated, token = self._authentication(databaseRef, username, password)
+      if authenticated:
+        self._accept(token)
+      else:
+        self._sendError("Wrong username and/or password.")
+        logging.error("Wrong username and/or password. Closing the connection.")
+        raise RuntimeWarning("Wrong username and/or password. Closing the connection.")
     else:
       print('no data from {address}'.format(address=self.address))
       logging.info('No data from {address}, closing connection.'.format(address=self.address))
@@ -65,9 +82,18 @@ class Connection:
 
 class Server:
   def __init__(self, host, port):
+    logging.info("Staring the logon server...")
     self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     self.host = host
     self.port = port
+
+    # TODO: configból
+    self.mysqlDb = mysql.connector.connect(
+      host="mysql-server",
+      user="adminuser",
+      password="almafa1",
+      database="chatdb"
+    )
 
     # Bind the socket to the port
     server_address = (host, port)
@@ -89,7 +115,7 @@ class Server:
         # Receive the data in small chunks and retransmit it
         while True:
           connection.getMessage()
-          connection.handleMessage()
+          connection.handleMessage(self.mysqlDb)
       except Warning as warn:
         logging.info(warn)
       finally:
@@ -101,7 +127,7 @@ class Server:
 # server -> client: ERROR <message>\n
 
 if __name__ == "__main__":
-  logging.basicConfig(filename='logon.log', level=logging.INFO, format='%(asctime)s %(levelname)s:%(name)s:%(message)s', encoding='utf-8')
+  logging.basicConfig(filename='logon.log', level=logging.DEBUG, format='%(asctime)s %(levelname)s:%(name)s:%(message)s', encoding='utf-8')
 
-  server = Server('localhost', 10000)
+  server = Server('0.0.0.0', 10000)
   server.start()
